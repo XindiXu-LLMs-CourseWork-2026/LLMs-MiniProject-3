@@ -20,5 +20,5 @@ AV_BASE = os.getenv("ALPHAVANTAGE_BASE_URL", "https://www.alphavantage.co")
 
 MODEL_SMALL = "gpt-4o-mini"
 MODEL_LARGE = "gpt-4o"
-ACTIVE_MODEL = MODEL_SMALL
+ACTIVE_MODEL = MODEL_LARGE
 client = OpenAI(api_key=OPENAI_API_KEY)

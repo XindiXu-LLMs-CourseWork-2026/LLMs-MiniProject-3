@@ -1,24 +1,24 @@
-from config import REQUIRED_KEYS
 import json
 import re
 
-class Evaluator:
-    def __init__(self, openai_client):
-        self.openai_client = openai_client
+from config import client, ACTIVE_MODEL
 
-    def run_evaluator(self, question: str, expected_answer: str, agent_answer: str) -> dict:
-        """
-        Score one agent answer against the expected answer description.
+REQUIRED_KEYS = {"score", "max_score", "reasoning", "hallucination_detected", "key_issues"}
 
-        Returns dict with keys:
-            score, max_score, reasoning, hallucination_detected, key_issues
 
-        On JSON parse failure, return:
-            {"score":0,"max_score":3,"reasoning":"evaluator parse error",
-             "hallucination_detected":False,"key_issues":["evaluator failed to parse"]}
-        """
+def run_evaluator(question: str, expected_answer: str, agent_answer: str) -> dict:
+    """
+    Score one agent answer against the expected answer description.
 
-        prompt = f"""
+    Returns dict with keys:
+        score, max_score, reasoning, hallucination_detected, key_issues
+
+    On JSON parse failure, return:
+        {"score":0,"max_score":3,"reasoning":"evaluator parse error",
+         "hallucination_detected":False,"key_issues":["evaluator failed to parse"]}
+    """
+
+    prompt = f"""
         You are an LLM-based evaluator (LLM-as-judge). Your task is to score an agent's answer against an expected answer description.
 
         Rules:
@@ -70,34 +70,39 @@ class Evaluator:
 
         """
 
+    messages = [{"role": "user", "content": prompt}]
+    params = {
+        "model": ACTIVE_MODEL,
+        "messages": messages,
+        "temperature": 0,
+    }
+    response = client.chat.completions.create(**params)
+    answer_text = response.choices[0].message.content
+    result =parse_json(answer_text)
+    return result
 
-        messages=[{"role": "user", "content": prompt}]
-        response = self.openai_client.get_ai_response(messages, 0)
-        answer_text = response.choices[0].message.content
-        result = self.parse_json(answer_text)
+
+def parse_json(answer_text: str) -> dict:
+    """
+    Safely parse LLM output that may be wrapped in ```json ... ``` markdown
+    """
+    # remove ```json ... ``` 或 ``` ... ```
+    answer_text = answer_text.strip()
+    markdown_pattern = r"^```(?:json)?\s*(.*?)\s*```$"
+    match = re.match(markdown_pattern, answer_text, re.DOTALL)
+    if match:
+        answer_text = match.group(1)
+
+    try:
+        result = json.loads(answer_text)
+        if not isinstance(result, dict) or not REQUIRED_KEYS.issubset(result.keys()):
+            raise ValueError("Missing keys")
         return result
-
-    def parse_json(self, answer_text: str) -> dict:
-        """
-        Safely parse LLM output that may be wrapped in ```json ... ``` markdown
-        """
-        # remove ```json ... ``` 或 ``` ... ```
-        answer_text = answer_text.strip()
-        markdown_pattern = r"^```(?:json)?\s*(.*?)\s*```$"
-        match = re.match(markdown_pattern, answer_text, re.DOTALL)
-        if match:
-            answer_text = match.group(1)
-
-        try:
-            result = json.loads(answer_text)
-            if not isinstance(result, dict) or not REQUIRED_KEYS.issubset(result.keys()):
-                raise ValueError("Missing keys")
-            return result
-        except json.JSONDecodeError:
-            return {
-                "score": 0,
-                "max_score": 3,
-                "reasoning": "evaluator parse error",
-                "hallucination_detected": False,
-                "key_issues": ["evaluator failed to parse"]
-            }
+    except json.JSONDecodeError:
+        return {
+            "score": 0,
+            "max_score": 3,
+            "reasoning": "evaluator parse error",
+            "hallucination_detected": False,
+            "key_issues": ["evaluator failed to parse"]
+        }
