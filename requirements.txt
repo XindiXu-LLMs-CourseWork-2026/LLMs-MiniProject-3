@@ -1,2 +1,6 @@
 streamlit
 openai
+requests
+yfinance
+python-dotenv
+openpyxl
