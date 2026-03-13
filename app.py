@@ -1,5 +1,7 @@
 import streamlit as st
 
+from client.openai_client import OpenAIClient
+
 st.title("Mini Project 3: Agentic AI in FinTech")
 
 
@@ -26,6 +28,7 @@ if "messages" not in st.session_state:
 
 agent_type = st.sidebar.selectbox("Agent selector", ("Single Agent", "Multi-Agent"), index=1)
 model_type = st.sidebar.selectbox("Model selector", ("gpt-4o-mini", "gpt-4o"), index=1)
+openai_client = OpenAIClient(model_type=model_type)
 
 # Display existing chat messages
 # ... (code for displaying messages)
