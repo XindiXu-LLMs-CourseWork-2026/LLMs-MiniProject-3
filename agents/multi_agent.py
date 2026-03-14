@@ -217,7 +217,7 @@ class Critic:
 
 
 class Synthsizer:
-    def __init__(self, active_model=ACTIVE_MODEL):
+    def __init__(self):
         self.prompt = """
             You are the Synthesizer in a multi-agent stock analysis system.
 
@@ -266,14 +266,14 @@ class Synthsizer:
             - use answer to tell the orchestrator exactly how the plan should be refined
             - be specific about what additional evidence, tool usage, or specialist routing is needed
         """
-        self.active_model = active_model
 
-    def run(self, question: str, plan, valid_results: dict):
+
+    def run(self, question:str, plan, valid_results: dict):
         verified_results = json.dumps({
             "question": question,
             "orchestrator_plan": plan,
-            "valid_results": valid_results,
-        })
+            "valid_results" : valid_results,
+            })
         messages = [
             {"role": "system", "content": self.prompt},
             {"role": "user", "content": verified_results},
@@ -297,7 +297,7 @@ class Synthsizer:
         }
 
         params = {
-            "model": self.active_model,
+            "model": ACTIVE_MODEL,
             "messages": messages,
             "response_format": response_schema,
             "temperature": 0,
@@ -409,7 +409,7 @@ SPECIALIST_PROMPTS = {
         """,
 }
 
-def run_multi_agent(question, conv_hist = ""):
+def run_multi_agent(question, conv_hist = "", active_model=ACTIVE_MODEL):
     t0 = time.perf_counter()
 
     MARKET_TOOLS      = [SCHEMA_TICKERS, SCHEMA_PRICE, SCHEMA_STATUS, SCHEMA_MOVERS]
@@ -478,7 +478,7 @@ def run_multi_agent(question, conv_hist = ""):
             conv_hist += f"\n\nSpecalist results insufficient in answering user's question. Here's the reason:\n\n{synthesizer_results.reasoning}\n\nand replanning suggestions:\n\n{synthesizer_results.answer}"
             print("specialist results insufficent in answering user's question, returning to orchestrator replanning")
     
-    if retry < 5:
+    if retry < max_attempts:
         wall_time = round(time.perf_counter() - t0, 3)
         return {
             "final_answer": synthesizer_results.answer,
