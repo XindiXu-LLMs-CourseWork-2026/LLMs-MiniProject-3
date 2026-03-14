@@ -1,5 +1,6 @@
 import json
 import time
+from openai import RateLimitError
 from agents.models.agent_result import AgentResult
 from agents.tool_schemas import ALL_TOOL_FUNCTIONS
 from config import ACTIVE_MODEL, client
@@ -71,7 +72,12 @@ def run_specialist_agent(
             params["tools"] = tool_schemas
             params["tool_choice"] = "auto"
 
-        response = client.chat.completions.create(**params)
+        try:
+            response = client.chat.completions.create(**params)
+        except RateLimitError as e:
+            print("Rate limit hit, waiting and retrying...")
+            time.sleep(2)
+            response = client.chat.completions.create(**params)
         output = response.choices[0].message
         has_tool_call = output.tool_calls or []
 
@@ -114,7 +120,6 @@ def run_specialist_agent(
                     "content": str(results),
                 }
             )
-            time.sleep(2)
 
     return AgentResult(
         agent_name=agent_name,
