@@ -8,12 +8,17 @@ from config import ALPHAVANTAGE_API_KEY, AV_BASE, DB_PATH
 def get_price_performance(tickers: list, period: str = "1y"):
 
     results = {}
-
+    TICKER_ALIASES = {
+        "FI": "FISV",
+    }
+    def normalize_ticker(ticker: str) -> str:
+        return TICKER_ALIASES.get(ticker.upper(), ticker.upper())
+        
     for ticker in tickers:
 
         try:
-
-            data = yf.download(ticker, period=period, progress=False, auto_adjust=True)
+            yf_ticker = normalize_ticker(ticker)
+            data = yf.download(yf_ticker, period=period, progress=False, auto_adjust=True)
 
             if data.empty:
                 results[ticker] = {"error": "No data"}
