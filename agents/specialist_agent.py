@@ -114,7 +114,7 @@ def run_specialist_agent(
                     "content": str(results),
                 }
             )
-            time.sleep(1)
+            time.sleep(2)
 
     return AgentResult(
         agent_name=agent_name,
