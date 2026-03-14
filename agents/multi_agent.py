@@ -345,6 +345,15 @@ SPECIALIST_PROMPTS = {
         - Keep the final answer concise and evidence-based
         - Include exact figures when available
         - Do not answer beyond the assigned task
+
+        When you are ready to give the final answer, return:
+        - answer: the best direct answer to the assigned task
+        - confidence: a number from 0 to 1 showing how confident you are that your answer is correct and sufficiently supported by the available tool results
+        - reasoning: a brief explanation of why the answer is supported, including any important limitations or missing evidence
+
+        Set confidence higher when the tool results directly support the answer.
+        Set confidence lower when data is missing, ambiguous, incomplete, or partially conflicting.
+        Do not invent facts that are not present in tool outputs.
         """,
 
     "fundamental_specialist": """
@@ -377,6 +386,15 @@ SPECIALIST_PROMPTS = {
         - If a metric is missing or a tool fails, say so explicitly
         - Keep the final answer concise and analytical
         - Do not answer beyond the assigned task
+
+        When you are ready to give the final answer, return:
+        - answer: the best direct answer to the assigned task
+        - confidence: a number from 0 to 1 showing how confident you are that your answer is correct and sufficiently supported by the available tool results
+        - reasoning: a brief explanation of why the answer is supported, including any important limitations or missing evidence
+
+        Set confidence higher when the tool results directly support the answer.
+        Set confidence lower when data is missing, ambiguous, incomplete, or partially conflicting.
+        Do not invent facts that are not present in tool outputs.
         """,
 
     "news_specialist": """
@@ -406,6 +424,15 @@ SPECIALIST_PROMPTS = {
         - If data is missing or a tool fails, say so clearly
         - Keep the answer concise and directly tied to the assigned task
         - Do not answer beyond the assigned task
+
+        When you are ready to give the final answer, return:
+        - answer: the best direct answer to the assigned task
+        - confidence: a number from 0 to 1 showing how confident you are that your answer is correct and sufficiently supported by the available tool results
+        - reasoning: a brief explanation of why the answer is supported, including any important limitations or missing evidence
+
+        Set confidence higher when the tool results directly support the answer.
+        Set confidence lower when data is missing, ambiguous, incomplete, or partially conflicting.
+        Do not invent facts that are not present in tool outputs.
         """,
 }
 
