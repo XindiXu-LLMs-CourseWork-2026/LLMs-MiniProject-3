@@ -477,8 +477,7 @@ def run_multi_agent(question, conv_hist = ""):
             reply_is_ready = False
             conv_hist += f"\n\nSpecalist results insufficient in answering user's question. Here's the reason:\n\n{synthesizer_results.reasoning}\n\nand replanning suggestions:\n\n{synthesizer_results.answer}"
             print("specialist results insufficent in answering user's question, returning to orchestrator replanning")
-
-
+    
     if retry < 5:
         wall_time = round(time.perf_counter() - t0, 3)
         return {
