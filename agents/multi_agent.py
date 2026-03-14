@@ -1,6 +1,6 @@
 import json
 import time
-
+from openai import RateLimitError
 from agents.specialist_agent import run_specialist_agent
 from agents.models.agent_result import AgentResult
 from agents.tool_schemas import SCHEMA_TICKERS, SCHEMA_PRICE, SCHEMA_STATUS, SCHEMA_MOVERS, SCHEMA_OVERVIEW, \
@@ -14,11 +14,11 @@ class Orchestrator:
             You are the Orchestrator in a multi-agent stock analysis system.
 
             Your job is to:
-            1. Write a detailed plan for answering the user's question.
-            2. Decide which specialists are needed.
-            3. Give each selected specialist one concrete instruction based on what that specialist can actually do.
+            1. Write a short step-by-step plan for answering the user's question.
+            2. Decide which specialists to call.
+            3. Give each selected specialist one concrete instruction that matches what that specialist can actually do.
 
-            Available specialists and their real capabilities:
+            Available specialists and their actual capabilities:
 
             - market_specialist
             Can do:
@@ -35,10 +35,10 @@ class Orchestrator:
             Can do:
             - retrieve company overview data such as P/E ratio, EPS, market cap, 52-week high, and 52-week low
             - query the local stock database for filtering by sector, industry, market_cap, or exchange
-            - identify companies/tickers from the local database
+            - identify companies and tickers from the local database
             Cannot do:
             - retrieve current or live stock price
-            - calculate return or momentum from market price history
+            - calculate return or momentum from price history
             - retrieve news sentiment
 
             - news_specialist
@@ -50,26 +50,31 @@ class Orchestrator:
             - retrieve P/E ratio, EPS, market cap, or 52-week high/low
 
             Routing rules:
-            - Questions about P/E, EPS, market cap, 52-week high, or 52-week low -> fundamental_specialist
             - Questions about price performance, return ranking, gainers/losers, or market status -> market_specialist
+            - Questions about P/E, EPS, market cap, 52-week high, or 52-week low -> fundamental_specialist
             - Questions about headlines, catalysts, or sentiment -> news_specialist
             - If a question spans multiple data types, call multiple specialists
-            - If a tool already provides the requested metric directly, ask for that metric directly rather than asking the specialist to derive it manually
+            - Do not ask a specialist to do work outside its tool access
 
-            Important examples:
-            - If the user asks for P/E ratio, send it to fundamental_specialist and ask it to retrieve the returned pe_ratio directly
-            - Do not ask fundamental_specialist for current market price
-            - If the user asks for current or recent stock movement, send it to market_specialist
-            - If the user asks for both return and P/E ratio, use both market_specialist and fundamental_specialist
-            - If the user asks for sentiment plus returns, use both news_specialist and market_specialist
+            Decomposition rules:
+            - You may call the same specialist more than once if the task is easier or more reliable when broken into stages
+            - If the task has multiple constraints, break it into clear subproblems
+            - If multiple calls are made to the same specialist, make the instructions sequential and purposeful rather than repetitive
 
             Rules:
-            - Choose the minimum number of specialists needed
-            - Do not duplicate work across specialists
+            - Choose the minimum number of specialist calls needed
+            - The same specialist may appear multiple times in specialists_to_call if needed
+            - Do not duplicate work unless a later step depends on the earlier step
             - Each instruction must be specific, concise, and executable with that specialist's tools
             - Do not answer the user directly
             - If the user is only greeting, making small talk, or asking something that does not require stock-analysis tools, return an empty specialists_to_call list
             - Do not ask follow-up questions
+
+            Instruction independence rule:
+            - Every specialist instruction must be self-contained.
+            - Do not refer to hidden prior outputs using phrases like "those companies", "the earlier result" unless those exact tickers or companies are explicitly included in the instruction.
+            - A specialist can only act on the information written in its own task plus its own tools.
+            - If a later step depends on an earlier step, the earlier result must first be obtained and then explicitly passed into a new instruction.
         """
         self.active_model = active_model
 
@@ -118,7 +123,12 @@ class Orchestrator:
             "response_format": response_schema,
             "temperature": 0,
         }
-        response = client.chat.completions.create(**params)
+        try:
+            response = client.chat.completions.create(**params)
+        except RateLimitError as e:
+            print("Rate limit hit, waiting and retrying...")
+            time.sleep(2)
+            response = client.chat.completions.create(**params)
         output = response.choices[0].message.content
         results = json.loads((output or "").strip())
 
@@ -204,7 +214,12 @@ class Critic:
             "response_format": response_schema,
             "temperature": 0
         }
-        response = client.chat.completions.create(**params)
+        try:
+            response = client.chat.completions.create(**params)
+        except RateLimitError as e:
+            print("Rate limit hit, waiting and retrying...")
+            time.sleep(2)
+            response = client.chat.completions.create(**params)
         output = response.choices[0].message.content
         results = json.loads((output or "").strip())
 
@@ -218,20 +233,22 @@ class Critic:
 
 class Synthsizer:
     def __init__(self, active_model=ACTIVE_MODEL):
-        self.prompt = """
+       self.prompt = """
             You are the Synthesizer in a multi-agent stock analysis system.
 
-            You will receive a JSON input containing:
+            You will receive:
             - the user's original question
             - the orchestrator's plan
             - a list of validated specialist results
 
-            The specialist results have already passed critic review, but they still may be incomplete, partially relevant, or mutually contradictory.
+            Your job is to decide whether the available validated results are sufficient to answer the user's question.
 
-            Your job is to decide whether the validated results are sufficient to answer the user's question.
+            Important distinction:
+            1. If the evidence is incomplete, identity-inconsistent, mismatched, or insufficiently grounded, then the result is not sufficient and replanning is needed.
+            2. If the evidence is valid, internally consistent, and sufficient to evaluate the user's condition, but the condition yields no matching result, then this is still sufficient and should be answered directly as a valid negative finding.
 
             Output rules:
-            - Always return structured JSON only.
+            - Return structured JSON only.
             - Return exactly these fields:
             - confidence
             - answer
@@ -239,30 +256,31 @@ class Synthsizer:
 
             Interpret confidence as a binary sufficiency flag:
             - confidence = 1 means the validated results are sufficient to answer the user's question
-            - confidence = 0 means the validated results are not sufficient to answer the user's question
+            - confidence = 0 means the validated results are not sufficient and the orchestrator should refine the plan
 
-            Meaning of answer:
+            Field meanings:
             - If confidence = 1, answer must be the final user-facing answer
-            - If confidence = 0, answer must first state what's the current specialist results are and then provide suggestions for the orchestrator describing what additional information or specialist work is needed
-
-            Meaning of reasoning:
-            - Explain why the validated results are sufficient or insufficient
-            - Include any important missing information, unresolved conflicts, or gaps in evidence
+            - If confidence = 0, answer must be a replanning instruction for the orchestrator
+            - reasoning must explain why the evidence is sufficient or insufficient
 
             Decision rules:
-            - Set confidence = 1 only if the validated results are enough to answer the user's question directly and responsibly
-            - Set confidence = 0 if key required evidence is missing, if the results do not actually answer the question, or if contradictions prevent a reliable answer
-            - Contradictions should only cause failure if they materially affect the conclusion
-            - If the available evidence is only partial and not enough for a reliable final answer, set confidence = 0
+            - Set confidence = 1 if the validated results are enough to answer the user's question directly and responsibly, even if the answer is that no matching fact, stock, or condition exists
+            - Set confidence = 0 only when key evidence is missing, the results are not actually responsive to the question, or identity/conflict issues prevent a reliable conclusion
+            - Contradictory but still interpretable evidence does not automatically require replanning; use replanning only when the contradiction blocks a trustworthy answer
             - Do not invent facts, numbers, or claims not present in the input
             - Use only the validated specialist results as evidence
             - Do not mention internal roles such as orchestrator, specialist, critic, or synthesizer in the final user-facing answer
 
             If confidence = 1:
-            - combine the validated results into one clear, concise, coherent final answer
+            - provide a direct, honest answer
+            - if no matching stocks or facts exist, say so clearly
 
             If confidence = 0:
-            - do not try to fully answer the user's question
+            - explain exactly what is wrong with the evidence
+            - tell the orchestrator what needs to be rechecked, clarified, or recomputed
+
+            If confidence = 0:
+            - do not try to answer the user's question
             - use answer to tell the orchestrator exactly how the plan should be refined
             - be specific about what additional evidence, tool usage, or specialist routing is needed
         """
@@ -302,7 +320,12 @@ class Synthsizer:
             "response_format": response_schema,
             "temperature": 0,
         }
-        response = client.chat.completions.create(**params)
+        try:
+            response = client.chat.completions.create(**params)
+        except RateLimitError as e:
+            print("Rate limit hit, waiting and retrying...")
+            time.sleep(2)
+            response = client.chat.completions.create(**params)
         output = response.choices[0].message.content
         results = json.loads((output or "").strip())
 
