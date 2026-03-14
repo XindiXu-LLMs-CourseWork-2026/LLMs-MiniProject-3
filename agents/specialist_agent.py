@@ -34,7 +34,6 @@ def run_specialist_agent(
     max_iters     : hard cap on iterations to prevent infinite loops
     verbose       : print each tool call as it happens
     """
- 
     tools_called = []
     raw_data = {}
     messages = [
@@ -52,9 +51,8 @@ def run_specialist_agent(
                 "properties": {
                     "answer": {"type": "string"},
                     "confidence": {"type": "number"},
-                    "reasoning": {"type": "string"}
                     },
-                "required": ["answer", "confidence", "reasoning"],
+                "required": ["answer", "confidence"],
                 "additionalProperties": False,
             }
         }
@@ -129,4 +127,5 @@ def run_specialist_agent(
         raw_data=raw_data,
         issues_found=["maximum iteration reached"]
     )
+
 
