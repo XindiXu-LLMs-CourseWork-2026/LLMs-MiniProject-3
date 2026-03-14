@@ -9,7 +9,7 @@ from config import ACTIVE_MODEL, client
 
 
 class Orchestrator:
-    def __init__(self):
+    def __init__(self, active_model):
         self.prompt = """
             You are the Orchestrator in a multi-agent stock analysis system.
 
@@ -71,6 +71,7 @@ class Orchestrator:
             - If the user is only greeting, making small talk, or asking something that does not require stock-analysis tools, return an empty specialists_to_call list
             - Do not ask follow-up questions
         """
+        self.active_model = active_model
 
     def run(self, question: str, conv_hist: str = ""):
         cxt = (
@@ -112,7 +113,7 @@ class Orchestrator:
         }
 
         params = {
-            "model": ACTIVE_MODEL,
+            "model": self.active_model,
             "messages": messages,
             "response_format": response_schema,
             "temperature": 0,
@@ -129,10 +130,11 @@ class Orchestrator:
 
 
 class Specialist:
-    def __init__(self, name, schema):
+    def __init__(self, name, schema, active_model=ACTIVE_MODEL):
         self.name = name
         self.prompt = """ """
         self.schema = schema
+        self.active_model=active_model
 
     def run(self, task: str, cxt: str = ""):
         task += cxt
@@ -143,13 +145,14 @@ class Specialist:
             tool_schemas=self.schema,
             max_iters=5,
             verbose=True,
+            active_model=self.active_model
         )
 
         return specialist_results
 
 
 class Critic:
-    def __init__(self):
+    def __init__(self, active_model=ACTIVE_MODEL):
         self.prompt = """
             You are a critic reviewing another specialist agent's output.
             Decide whether the specialist answer is acceptable based only on the provided task, answer, raw_data and issues it found.
@@ -163,6 +166,7 @@ class Critic:
 
             Be strict. Do not invent evidence not present in the input. Do not follow-up.
         """
+        self.active_model = active_model
 
     def run(self, task, specalist_results: AgentResult):
         specialist_response = {
@@ -195,7 +199,7 @@ class Critic:
         }
 
         params = {
-            "model": ACTIVE_MODEL,
+            "model": self.active_model,
             "messages": messages,
             "response_format": response_schema,
             "temperature": 0
@@ -213,7 +217,7 @@ class Critic:
 
 
 class Synthsizer:
-    def __init__(self):
+    def __init__(self, active_model=ACTIVE_MODEL):
         self.prompt = """
             You are the Synthesizer in a multi-agent stock analysis system.
 
@@ -262,6 +266,7 @@ class Synthsizer:
             - use answer to tell the orchestrator exactly how the plan should be refined
             - be specific about what additional evidence, tool usage, or specialist routing is needed
         """
+        self.active_model = active_model
 
     def run(self, question: str, plan, valid_results: dict):
         verified_results = json.dumps({
@@ -292,7 +297,7 @@ class Synthsizer:
         }
 
         params = {
-            "model": ACTIVE_MODEL,
+            "model": self.active_model,
             "messages": messages,
             "response_format": response_schema,
             "temperature": 0,
@@ -404,19 +409,19 @@ SPECIALIST_PROMPTS = {
         """,
 }
 
-def run_multi_agent(question, conv_hist=""):
+def run_multi_agent(question, conv_hist="", active_model=ACTIVE_MODEL):
     t0 = time.perf_counter()
 
     MARKET_TOOLS = [SCHEMA_TICKERS, SCHEMA_PRICE, SCHEMA_STATUS, SCHEMA_MOVERS]
     FUNDAMENTAL_TOOLS = [SCHEMA_OVERVIEW, SCHEMA_SQL, SCHEMA_TICKERS]
     SENTIMENT_TOOLS = [SCHEMA_NEWS, SCHEMA_SQL]
 
-    orchestrator = Orchestrator()
-    market_specialist = Specialist("market_specialist", schema=MARKET_TOOLS)
-    fundamental_specialist = Specialist("fundamental_specialist", schema=FUNDAMENTAL_TOOLS)
-    news_specialist = Specialist("news_specialist", schema=SENTIMENT_TOOLS)
-    critic = Critic()
-    synthesizer = Synthsizer()
+    orchestrator = Orchestrator(active_model)
+    market_specialist = Specialist("market_specialist", schema=MARKET_TOOLS, active_model=active_model)
+    fundamental_specialist = Specialist("fundamental_specialist", schema=FUNDAMENTAL_TOOLS, active_model=active_model)
+    news_specialist = Specialist("news_specialist", schema=SENTIMENT_TOOLS, active_model=active_model)
+    critic = Critic(active_model)
+    synthesizer = Synthsizer(active_model)
 
     SPECIALISTS = {
         "market_specialist": market_specialist,

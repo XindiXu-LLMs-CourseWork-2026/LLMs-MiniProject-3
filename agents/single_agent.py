@@ -1,6 +1,7 @@
 from agents.models.agent_result import AgentResult
 from agents.specialist_agent import run_specialist_agent
 from agents.tools.tool_schemas import ALL_SCHEMAS
+from config import ACTIVE_MODEL
 
 SINGLE_AGENT_PROMPT = """
 You are a finance analysis agent with access to 7 tools.
@@ -50,7 +51,7 @@ Output style:
 - If uncertain, explicitly state what is unknown and why.
 """
 
-def run_single_agent(question: str, verbose: bool = True) -> AgentResult:
+def run_single_agent(question: str, verbose: bool = True, active_model=ACTIVE_MODEL) -> AgentResult:
     return run_specialist_agent(
         agent_name="Single Agent",
         system_prompt=SINGLE_AGENT_PROMPT,
@@ -58,4 +59,5 @@ def run_single_agent(question: str, verbose: bool = True) -> AgentResult:
         tool_schemas=ALL_SCHEMAS,
         max_iters=10,
         verbose=verbose,
+        active_model=active_model
     )

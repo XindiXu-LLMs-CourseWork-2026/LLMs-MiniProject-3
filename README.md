@@ -30,10 +30,21 @@ echo $env:ALPHAVANTAGE_API_KEY
 
 4. Init database
 ```bash
-python db/init_db.py
+python -m db.init_db
 ```
 
-5. Run the Streamlit app
+5. mock Alpha Vantage Server
+- Details can be found in [MOCK_ALPHA_VANTAGE_README.md](MOCK_ALPHA_VANTAGE_README.md)
+
+6. Run the evaluator
+```bash
+# run calibration tests and sanity check
+python -m evaluation.evaluation_tests
+# run full evaluation and save the results into excel
+python -m evaluation.full_evaluation_runner
+```
+
+7. Run the Streamlit app
 ```bash
 streamlit run app.py
 ```

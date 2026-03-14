@@ -12,6 +12,7 @@ def run_specialist_agent(
         tool_schemas: list,
         max_iters: int = 8,
         verbose: bool = True,
+        active_model=ACTIVE_MODEL
 ) -> AgentResult:
     """
     Core agentic loop used by every agent in this project.
@@ -42,7 +43,7 @@ def run_specialist_agent(
 
     for i in range(max_iters):
         params = {
-            "model": ACTIVE_MODEL,
+            "model": active_model,
             "messages": messages,
             "temperature": 0,
         }
