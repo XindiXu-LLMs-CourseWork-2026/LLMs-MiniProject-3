@@ -9,7 +9,7 @@ from config import ACTIVE_MODEL, client
 
 
 class Orchestrator:
-    def __init__(self, active_model):
+    def __init__(self, active_model=ACTIVE_MODEL):
         self.prompt = """
             You are the Orchestrator in a multi-agent stock analysis system.
 
@@ -217,7 +217,7 @@ class Critic:
 
 
 class Synthsizer:
-    def __init__(self):
+    def __init__(self, active_model=ACTIVE_MODEL):
         self.prompt = """
             You are the Synthesizer in a multi-agent stock analysis system.
 
@@ -266,14 +266,14 @@ class Synthsizer:
             - use answer to tell the orchestrator exactly how the plan should be refined
             - be specific about what additional evidence, tool usage, or specialist routing is needed
         """
+        self.active_model = active_model
 
-
-    def run(self, question:str, plan, valid_results: dict):
+    def run(self, question: str, plan, valid_results: dict):
         verified_results = json.dumps({
             "question": question,
             "orchestrator_plan": plan,
-            "valid_results" : valid_results,
-            })
+            "valid_results": valid_results,
+        })
         messages = [
             {"role": "system", "content": self.prompt},
             {"role": "user", "content": verified_results},
@@ -297,7 +297,7 @@ class Synthsizer:
         }
 
         params = {
-            "model": ACTIVE_MODEL,
+            "model": self.active_model,
             "messages": messages,
             "response_format": response_schema,
             "temperature": 0,
@@ -416,12 +416,12 @@ def run_multi_agent(question, conv_hist = "", active_model=ACTIVE_MODEL):
     FUNDAMENTAL_TOOLS = [SCHEMA_OVERVIEW, SCHEMA_SQL, SCHEMA_TICKERS]
     SENTIMENT_TOOLS   = [SCHEMA_NEWS, SCHEMA_SQL]
 
-    orchestrator = Orchestrator()
+    orchestrator = Orchestrator(active_model)
     market_specialist = Specialist("market_specialist", schema=MARKET_TOOLS)
     fundamental_specialist = Specialist("fundamental_specialist", schema=FUNDAMENTAL_TOOLS)
     news_specialist = Specialist("news_specialist", schema=SENTIMENT_TOOLS)
-    critic = Critic()
-    synthesizer = Synthsizer()
+    critic = Critic(active_model)
+    synthesizer = Synthsizer(active_model)
 
     SPECIALISTS = {
         "market_specialist": market_specialist,
@@ -438,12 +438,12 @@ def run_multi_agent(question, conv_hist = "", active_model=ACTIVE_MODEL):
     while not reply_is_ready and retry < 5:
         orchestrator_results = orchestrator.run(question=question, conv_hist=conv_hist)
         plan = orchestrator_results.answer
-        display(Markdown(plan))
+        print(plan)
 
         for specialist_called  in orchestrator_results.raw_data["specialist_to_call"]:
             sp = specialist_called["agent_name"]
             task = specialist_called["instruction"]
-            display(Markdown(task))
+            print(task)
             SPECIALISTS[sp].prompt = SPECIALIST_PROMPTS[sp]
             task_success = False
             task_attempt = 1
