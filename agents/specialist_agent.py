@@ -33,7 +33,7 @@ def run_specialist_agent(
     max_iters     : hard cap on iterations to prevent infinite loops
     verbose       : print each tool call as it happens
     """
-    ### YOUR CODE HERE ###
+ 
     tools_called = []
     raw_data = {}
     messages = [
@@ -41,10 +41,29 @@ def run_specialist_agent(
         {"role": "user", "content": task}
     ]
 
+    response_schema = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "specialist_result",
+            "strict": True,
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "answer": {"type": "string"},
+                    "confidence": {"type": "number"},
+                    "reasoning": {"type": "string"}
+                    },
+                "required": ["answer", "confidence", "reasoning"],
+                "additionalProperties": False,
+            }
+        }
+    }
+
     for i in range(max_iters):
         params = {
-            "model": active_model,
+            "model":ACTIVE_MODEL,
             "messages": messages,
+            "response_format":response_schema,
             "temperature": 0,
         }
 
@@ -57,14 +76,15 @@ def run_specialist_agent(
         has_tool_call = output.tool_calls or []
 
         if not has_tool_call:
-            answer = (output.content or "").strip()
+            results = json.loads((output.content or "").strip())
             return AgentResult(
                 agent_name=agent_name,
-                answer=answer or "No answer generated",
+                answer=results["answer"],
+                confidence=float(results["confidence"]),
                 tools_called=tools_called,
                 raw_data=raw_data
             )
-
+        
         messages.append(output.model_dump(exclude_none=True))
         for tc in has_tool_call:
             name = tc.function.name
@@ -73,7 +93,7 @@ def run_specialist_agent(
                 args = json.loads(arguments)
             except Exception:
                 args = {}
-
+            
             if verbose:
                 print(f"{agent_name} is calling tool: {name}")
 
@@ -82,7 +102,7 @@ def run_specialist_agent(
                 f_output = func(**args)
             else:
                 f_output = {"Error": f"Function: {name} is not avaliable"}
-
+            
             tools_called.append(name)
             raw_data.setdefault(name, []).append(f_output)
             results = json.dumps(f_output)
@@ -94,11 +114,14 @@ def run_specialist_agent(
                     "content": str(results),
                 }
             )
+            time.sleep(1)
 
     return AgentResult(
         agent_name=agent_name,
         answer=f"Maximum iteration {max_iters} reached",
+        confidence=0.0,
         tools_called=tools_called,
         raw_data=raw_data,
         issues_found=["maximum iteration reached"]
     )
+
