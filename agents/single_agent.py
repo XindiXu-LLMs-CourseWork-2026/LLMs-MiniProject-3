@@ -1,6 +1,6 @@
 from agents.models.agent_result import AgentResult
 from agents.specialist_agent import run_specialist_agent
-from agents.tools.tool_schemas import ALL_SCHEMAS
+from agents.tool_schemas import ALL_SCHEMAS
 from config import ACTIVE_MODEL
 
 SINGLE_AGENT_PROMPT = """

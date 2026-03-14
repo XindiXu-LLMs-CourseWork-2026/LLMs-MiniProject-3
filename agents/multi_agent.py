@@ -3,7 +3,7 @@ import time
 
 from agents.specialist_agent import run_specialist_agent
 from agents.models.agent_result import AgentResult
-from agents.tools.tool_schemas import SCHEMA_TICKERS, SCHEMA_PRICE, SCHEMA_STATUS, SCHEMA_MOVERS, SCHEMA_OVERVIEW, \
+from agents.tool_schemas import SCHEMA_TICKERS, SCHEMA_PRICE, SCHEMA_STATUS, SCHEMA_MOVERS, SCHEMA_OVERVIEW, \
     SCHEMA_SQL, SCHEMA_NEWS
 from config import ACTIVE_MODEL, client
 
@@ -452,6 +452,7 @@ def run_multi_agent(question, conv_hist = "", active_model=ACTIVE_MODEL):
             while not task_success and task_attempt <= max_attempts:
                 task_attempt += 1
                 sp_results = SPECIALISTS[sp].run(task=task, cxt=cxt)
+                # print(f"sp_results.raw_data: {sp_results.raw_data}")
                 critic_results = critic.run(task=task, specalist_results=sp_results)
 
                 if not critic_results.answer:

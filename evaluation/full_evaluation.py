@@ -183,7 +183,9 @@ def run_full_evaluation(output_xlsx: str = "results.xlsx", delay_sec: float = 3.
         try:
             t0 = time.time()
             ma = run_multi_agent(q["question"])
+            print(f"ma: {ma}")
             res = ma.get("agent_results", [])
+            print(f"res: {res}")
             all_tools = [t for r in res for t in r.tools_called]
             all_issues = [iss for r in res for iss in r.issues_found]
             avg_conf = sum(r.confidence for r in res) / len(res) if res else 0.0

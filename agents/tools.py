@@ -107,20 +107,24 @@ def get_company_overview(ticker: str):
 
 
 def get_tickers_by_sector(sector: str):
-
-    sql = """
-    SELECT ticker, company, sector, industry
-    FROM stocks
-    WHERE LOWER(sector) LIKE LOWER(?)
-    """
-
-    conn = sqlite3.connect(DB_PATH)
-
-    df = pd.read_sql_query(sql, conn, params=[f"%{sector}%"])
-
-    conn.close()
-
-    return {
-        "sector":sector,
-        "stocks":df.to_dict(orient="records")
-    }
+    sql_sector = """
+                 SELECT ticker, company, sector, industry
+                 FROM stocks
+                 WHERE LOWER(sector) LIKE Lower(?) \
+                 """
+    sql_industry = """
+                   SELECT ticker, company, sector, industry
+                   FROM stocks
+                   WHERE LOWER(industry) LIKE Lower(?) \
+                   """
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            df = pd.read_sql_query(sql_sector, conn, params=[f"%{sector}%"])
+            if df.empty:
+                df = pd.read_sql_query(sql_industry, conn, params=[f"%{sector}%"])
+        return {
+            "sector": df["sector"].iloc[0],
+            "stocks": df[["ticker", "company", "industry"]].to_dict(orient="records")
+        }
+    except Exception as e:
+        return {"error": str(e)}

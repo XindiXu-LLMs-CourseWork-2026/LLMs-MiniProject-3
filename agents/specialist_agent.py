@@ -1,7 +1,7 @@
 import json
 
 from agents.models.agent_result import AgentResult
-from agents.tools.tool_schemas import ALL_TOOL_FUNCTIONS
+from agents.tool_schemas import ALL_TOOL_FUNCTIONS
 from config import ACTIVE_MODEL, client
 
 

@@ -1,6 +1,7 @@
 from agents.baseline_agent import run_baseline
 from agents.multi_agent import run_multi_agent
 from agents.single_agent import run_single_agent
+from agents.tools import query_local_db, get_tickers_by_sector
 from evaluation.evaluator import run_evaluator
 from evaluation.full_evaluation import BENCHMARK_QUESTIONS
 
@@ -41,7 +42,7 @@ def calibration_tests():
 def sanity_check():
     # ── Sanity check — one question, all three architectures ──────
     print("=== Sanity check ===")
-    q_test = BENCHMARK_QUESTIONS[2]  # Q03 — easy fundamentals
+    q_test = BENCHMARK_QUESTIONS[7]  # Q03 — easy fundamentals
     print(f"Test question: {q_test['question']}\n")
 
     bl_t = run_baseline(q_test["question"], verbose=False)
@@ -59,5 +60,13 @@ def sanity_check():
 
 
 if __name__ == "__main__":
-    calibration_tests()
-    sanity_check()
+    # calibration_tests()
+    # sanity_check()
+    # sql = "select ticker, company from stocks limit 10"
+#     sql = """SELECT ticker, company, industry
+# FROM stocks
+# WHERE LOWER(industry) LIKE
+# LOWER('%semiconductor%')"""
+#     # query_local_db(sql)
+#     print(query_local_db(sql))
+    print(get_tickers_by_sector('semiconductor'))

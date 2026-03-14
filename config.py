@@ -10,7 +10,8 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "YOUR_KEY")
 ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY", "test")
 
 # database
-DB_PATH = "./db/stocks.db"
+DB_CREATE_PATH = "stocks.db"
+DB_PATH = "../stocks.db"
 
 # Mock ALPHAVANTAGE
 os.environ["ALPHAVANTAGE_BASE_URL"] = "http://127.0.0.1:2345"
