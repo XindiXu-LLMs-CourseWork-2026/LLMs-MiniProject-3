@@ -243,7 +243,7 @@ class Synthsizer:
 
             Meaning of answer:
             - If confidence = 1, answer must be the final user-facing answer
-            - If confidence = 0, answer must be a replanning instruction or suggestion for the orchestrator describing what additional information or specialist work is needed
+            - If confidence = 0, answer must first state what's the current specialist results are and then provide suggestions for the orchestrator describing what additional information or specialist work is needed
 
             Meaning of reasoning:
             - Explain why the validated results are sufficient or insufficient
