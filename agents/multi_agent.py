@@ -409,19 +409,19 @@ SPECIALIST_PROMPTS = {
         """,
 }
 
-def run_multi_agent(question, conv_hist="", active_model=ACTIVE_MODEL):
+def run_multi_agent(question, conv_hist = ""):
     t0 = time.perf_counter()
 
-    MARKET_TOOLS = [SCHEMA_TICKERS, SCHEMA_PRICE, SCHEMA_STATUS, SCHEMA_MOVERS]
+    MARKET_TOOLS      = [SCHEMA_TICKERS, SCHEMA_PRICE, SCHEMA_STATUS, SCHEMA_MOVERS]
     FUNDAMENTAL_TOOLS = [SCHEMA_OVERVIEW, SCHEMA_SQL, SCHEMA_TICKERS]
-    SENTIMENT_TOOLS = [SCHEMA_NEWS, SCHEMA_SQL]
+    SENTIMENT_TOOLS   = [SCHEMA_NEWS, SCHEMA_SQL]
 
-    orchestrator = Orchestrator(active_model)
-    market_specialist = Specialist("market_specialist", schema=MARKET_TOOLS, active_model=active_model)
-    fundamental_specialist = Specialist("fundamental_specialist", schema=FUNDAMENTAL_TOOLS, active_model=active_model)
-    news_specialist = Specialist("news_specialist", schema=SENTIMENT_TOOLS, active_model=active_model)
-    critic = Critic(active_model)
-    synthesizer = Synthsizer(active_model)
+    orchestrator = Orchestrator()
+    market_specialist = Specialist("market_specialist", schema=MARKET_TOOLS)
+    fundamental_specialist = Specialist("fundamental_specialist", schema=FUNDAMENTAL_TOOLS)
+    news_specialist = Specialist("news_specialist", schema=SENTIMENT_TOOLS)
+    critic = Critic()
+    synthesizer = Synthsizer()
 
     SPECIALISTS = {
         "market_specialist": market_specialist,
@@ -432,19 +432,18 @@ def run_multi_agent(question, conv_hist="", active_model=ACTIVE_MODEL):
     SPECIALISTS_RESULTS = []
 
     reply_is_ready = False
-    max_attempts = 3
-
-    while not reply_is_ready:
+    max_attempts = 5
+    
+    retry = 0
+    while not reply_is_ready and retry < 5:
         orchestrator_results = orchestrator.run(question=question, conv_hist=conv_hist)
         plan = orchestrator_results.answer
-        print("\nOrchestrator Plan:\n")
-        print(plan)
+        display(Markdown(plan))
 
-        for specialist_called in orchestrator_results.raw_data["specialist_to_call"]:
+        for specialist_called  in orchestrator_results.raw_data["specialist_to_call"]:
             sp = specialist_called["agent_name"]
             task = specialist_called["instruction"]
-            print("\nSpecialist Task:\n")
-            print(task)
+            display(Markdown(task))
             SPECIALISTS[sp].prompt = SPECIALIST_PROMPTS[sp]
             task_success = False
             task_attempt = 1
@@ -460,7 +459,7 @@ def run_multi_agent(question, conv_hist="", active_model=ACTIVE_MODEL):
                     task_success = False
                 else:
                     task_success = True
-
+            
             if task_attempt > max_attempts:
                 print(f"{sp} has reached it maximum attempts")
                 SPECIALISTS_ANSWER[sp] = "Specialist failed in retrieving relevant infomation."
@@ -468,20 +467,31 @@ def run_multi_agent(question, conv_hist="", active_model=ACTIVE_MODEL):
                 print(f"{sp} has passed critic's evaluation")
                 SPECIALISTS_ANSWER[sp] = sp_results.answer
             SPECIALISTS_RESULTS.append(sp_results)
-
+    
         synthesizer_results = synthesizer.run(question=question, plan=plan, valid_results=SPECIALISTS_ANSWER)
         if synthesizer_results.confidence == 1.0:
             reply_is_ready = True
             print("reply is ready")
         else:
+            retry += 1
             reply_is_ready = False
             conv_hist += f"\n\nSpecalist results insufficient in answering user's question. Here's the reason:\n\n{synthesizer_results.reasoning}\n\nand replanning suggestions:\n\n{synthesizer_results.answer}"
             print("specialist results insufficent in answering user's question, returning to orchestrator replanning")
 
-    wall_time = round(time.perf_counter() - t0, 3)
-    return {
-        "final_answer": synthesizer_results.answer,
-        "agent_results": SPECIALISTS_RESULTS,
-        "elapsed_sec": wall_time,
-        "architecture": "orchestrator-critic"
-    }
+
+    if retry < 5:
+        wall_time = round(time.perf_counter() - t0, 3)
+        return {
+            "final_answer": synthesizer_results.answer,
+            "agent_results": SPECIALISTS_RESULTS,
+            "elapsed_sec": wall_time,
+            "architecture": "orchestrator-critic"
+        }
+    else:
+        wall_time = round(time.perf_counter() - t0, 3)
+        return {
+            "final_answer": "Sorry, I am not being able to answer your question now.",
+            "agent_results": SPECIALISTS_RESULTS,
+            "elapsed_sec": wall_time,
+            "architecture": "orchestrator-critic"
+        }
