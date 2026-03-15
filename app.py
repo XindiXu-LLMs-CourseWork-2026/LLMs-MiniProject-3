@@ -6,7 +6,6 @@ from agents.single_agent import run_single_agent
 st.title("Mini Project 3: Agentic AI in FinTech")
 
 
-# Define a function to get the conversation history (Not required for Part-2, will be useful in Part-3)
 def get_conversation() -> str:
     # return: A formatted string representation of the conversation.
     # ... (code for getting conversation history)
@@ -16,12 +15,6 @@ def get_conversation() -> str:
         content = msg["content"]
         conversation += f"{role}: {content}\n"
     return conversation
-
-
-# Check for existing session state variables
-if "openai_model" not in st.session_state:
-    # ... (initialize model)
-    st.session_state["openai_model"] = 'gpt-3.5-turbo'
 
 if "messages" not in st.session_state:
     # ... (initialize messages)

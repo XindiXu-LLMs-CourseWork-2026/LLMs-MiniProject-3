@@ -15,7 +15,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = str(BASE_DIR / "stocks.db")
 
 # Mock ALPHAVANTAGE
-os.environ["ALPHAVANTAGE_BASE_URL"] = "http://127.0.0.1:2345"
+# os.environ["ALPHAVANTAGE_BASE_URL"] = "http://127.0.0.1:2345"
 AV_BASE = os.getenv("ALPHAVANTAGE_BASE_URL", "https://www.alphavantage.co")
 
 # OpenAI

@@ -86,7 +86,7 @@ def parse_json(answer_text: str) -> dict:
     """
     Safely parse LLM output that may be wrapped in ```json ... ``` markdown
     """
-    # remove ```json ... ``` 或 ``` ... ```
+    # remove ```json ... ``` or ``` ... ```
     answer_text = answer_text.strip()
     markdown_pattern = r"^```(?:json)?\s*(.*?)\s*```$"
     match = re.match(markdown_pattern, answer_text, re.DOTALL)

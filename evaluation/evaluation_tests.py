@@ -60,13 +60,5 @@ def sanity_check():
 
 
 if __name__ == "__main__":
-    # calibration_tests()
-    # sanity_check()
-    # sql = "select ticker, company from stocks limit 10"
-#     sql = """SELECT ticker, company, industry
-# FROM stocks
-# WHERE LOWER(industry) LIKE
-# LOWER('%semiconductor%')"""
-#     # query_local_db(sql)
-#     print(query_local_db(sql))
-    print(get_tickers_by_sector('semiconductor'))
+    calibration_tests()
+    sanity_check()
