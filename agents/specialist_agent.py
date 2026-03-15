@@ -60,6 +60,7 @@ def run_specialist_agent(
     }
 
     for i in range(max_iters):
+        print(f"running iteration #{i+1}")
         params = {
             "model":active_model,
             "messages": messages,
@@ -75,7 +76,7 @@ def run_specialist_agent(
             response = client.chat.completions.create(**params)
         except RateLimitError:
             print("Rate limit hit, waiting and retrying...")
-            time.sleep(2)
+            time.sleep(5)
             response = client.chat.completions.create(**params)
         output = response.choices[0].message
         has_tool_call = output.tool_calls or []

@@ -1,19 +1,10 @@
 import json
 import time
-
 from openai import RateLimitError
-
-from agents.models.agent_result import AgentResult
 from agents.specialist_agent import run_specialist_agent
-from agents.tool_schemas import (
-    SCHEMA_MOVERS,
-    SCHEMA_NEWS,
-    SCHEMA_OVERVIEW,
-    SCHEMA_PRICE,
-    SCHEMA_SQL,
-    SCHEMA_STATUS,
-    SCHEMA_TICKERS,
-)
+from agents.models.agent_result import AgentResult
+from agents.tool_schemas import SCHEMA_TICKERS, SCHEMA_PRICE, SCHEMA_STATUS, SCHEMA_MOVERS, SCHEMA_OVERVIEW, \
+    SCHEMA_SQL, SCHEMA_NEWS
 from config import ACTIVE_MODEL, client
 
 
@@ -22,17 +13,10 @@ class Orchestrator:
         self.prompt = """
             You are the Orchestrator in a multi-agent stock analysis system.
 
-            You are called repeatedly during execution. On each call, you receive:
-            - the user's original question
-            - conversation or replanning guidance
-            - the current plan summary
-            - executed step history
-            - accumulated specialist result summaries
-
             Your job is to:
-            1. Maintain or revise the current step-by-step plan.
-            2. Decide whether more specialist work is still needed.
-            3. If more work is needed, return exactly one next specialist instruction.
+            1. Write a short step-by-step plan for answering the user's question.
+            2. Decide which specialists to call.
+            3. Give each selected specialist one concrete instruction that matches what that specialist can actually do.
 
             Available specialists and their actual capabilities:
 
@@ -79,18 +63,14 @@ class Orchestrator:
 
             Rules:
             - Choose the minimum number of specialist calls needed
-            - The same specialist may appear multiple times across repeated calls if needed
-            - Emit at most one executable specialist step per call
+            - The same specialist may appear multiple times in specialists_to_call if needed
             - Do not duplicate work unless a later step depends on the earlier step
-            - If earlier validated results are still useful, keep them and build on them instead of restarting
-            - If a prior step failed or was incomplete, revise the next step accordingly
             - Each instruction must be specific, concise, and executable with that specialist's tools
             - Do not explicitly instruct a specialist to retrieve all stocks from the database or dataset
             - State the goal, constraints, and desired output, and let the specialist decide how much data to retrieve
             - Prefer minimal, targeted instructions over broad data-retrieval instructions
-            - Return status = "done" only when no additional specialist steps are needed before synthesis
             - Do not answer the user directly
-            - If the user is only greeting, making small talk, or asking something that does not require stock-analysis tools, return status = "done" with next_step = null
+            - If the user is only greeting, making small talk, or asking something that does not require stock-analysis tools, return an empty specialists_to_call list
             - Do not ask follow-up questions
 
             Instruction independence rule:
@@ -101,22 +81,10 @@ class Orchestrator:
         """
         self.active_model = active_model
 
-    def run(
-        self,
-        question: str,
-        conv_hist: str = "",
-        current_plan: str = "",
-        execution_history: list | None = None,
-        specialist_results: list | None = None,
-    ):
-        cxt = json.dumps(
-            {
-                "question": question,
-                "conversation_history": conv_hist,
-                "current_plan": current_plan,
-                "executed_step_history": execution_history or [],
-                "specialist_results_summary": specialist_results or [],
-            }
+    def run(self, question: str, conv_hist: str = ""):
+        cxt = (
+            f"question:\n{question}\n\n"
+            f"conversation history:\n{conv_hist}"
         )
         messages = [
             {"role": "system", "content": self.prompt},
@@ -131,30 +99,22 @@ class Orchestrator:
                     "type": "object",
                     "properties": {
                         "plan": {"type": "string"},
-                        "status": {"type": "string", "enum": ["continue", "done"]},
-                        "next_step": {
-                            "anyOf": [
-                                {"type": "null"},
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "agent_name": {
-                                            "type": "string",
-                                            "enum": [
-                                                "market_specialist",
-                                                "fundamental_specialist",
-                                                "news_specialist",
-                                            ],
-                                        },
-                                        "instruction": {"type": "string"},
-                                    },
-                                    "required": ["agent_name", "instruction"],
-                                    "additionalProperties": False,
+                        "specialists_to_call": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "agent_name": {"type": "string",
+                                                   "enum": ["market_specialist", "fundamental_specialist",
+                                                            "news_specialist"]},
+                                    "instruction": {"type": "string"},
                                 },
-                            ]
+                                "required": ["agent_name", "instruction"],
+                                "additionalProperties": False,
+                            }
                         },
                     },
-                    "required": ["plan", "status", "next_step"],
+                    "required": ["plan", "specialists_to_call"],
                     "additionalProperties": False,
                 },
             },
@@ -168,7 +128,7 @@ class Orchestrator:
         }
         try:
             response = client.chat.completions.create(**params)
-        except RateLimitError:
+        except RateLimitError as e:
             print("Rate limit hit, waiting and retrying...")
             time.sleep(2)
             response = client.chat.completions.create(**params)
@@ -178,10 +138,7 @@ class Orchestrator:
         return AgentResult(
             agent_name="Orchestrator",
             answer=results["plan"],
-            raw_data={
-                "status": results["status"],
-                "next_step": results["next_step"],
-            },
+            raw_data={"specialist_to_call": results["specialists_to_call"]},
         )
 
 
@@ -190,7 +147,7 @@ class Specialist:
         self.name = name
         self.prompt = """ """
         self.schema = schema
-        self.active_model = active_model
+        self.active_model=active_model
 
     def run(self, task: str, cxt: str = ""):
         task += cxt
@@ -199,9 +156,9 @@ class Specialist:
             system_prompt=self.prompt,
             task=task,
             tool_schemas=self.schema,
-            max_iters=10,
+            max_iters=5,
             verbose=True,
-            active_model=self.active_model,
+            active_model=self.active_model
         )
 
         return specialist_results
@@ -211,25 +168,7 @@ class Critic:
     def __init__(self, active_model=ACTIVE_MODEL):
         self.prompt = """
             You are a critic reviewing another specialist agent's output.
-            Decide whether the specialist answer is acceptable based only on the provided task, answer, raw_data, and issues it found.
-
-            Core evaluation rule:
-            - Use only the provided evidence.
-            - Do not guess, infer missing values, or invent conflicts.
-            - If the answer is a ranking, comparison, top-k result, filter result, or any numerically constrained claim, explicitly compare the relevant values from the evidence before judging.
-            - Read the raw_data carefully and base your judgment only on values that are actually present there.
-            - Never mark an answer wrong unless you can point to a specific contradiction with the provided evidence.
-            - If the evidence is insufficient to prove the answer wrong, prefer explaining that the evidence is insufficient rather than inventing a contradiction.
-            - A valid negative finding should pass: if the task asks for stocks that satisfy some criteria and the evidence shows that no retrieved stocks satisfy those criteria, then an answer that clearly says no stocks matched should be judged acceptable.
-            - If the specialist correctly identifies that no stock matches the task criteria, pass the answer and explain which checked evidence supports that negative finding so the orchestrator can reuse it.
-
-            Consistency check before finalizing:
-            1. Identify the exact values or records relevant to the task.
-            2. If ranking is required, sort them mentally by the provided numbers before judging.
-            3. Check that your reasoning matches those values exactly.
-            4. If your reasoning would contradict the evidence, revise the judgment before responding.
-            5. If the task is a filter/search and every relevant candidate fails the required condition, treat "no matches found" as a valid result rather than a failure.
-
+            Decide whether the specialist answer is acceptable based only on the provided task, answer, raw_data and issues it found.
             Return JSON with:
             - judgement: 1 if the answer is acceptable, 0 otherwise
             - reasoning: brief explanation why the specialist agent answer is pass or fail
@@ -276,11 +215,11 @@ class Critic:
             "model": self.active_model,
             "messages": messages,
             "response_format": response_schema,
-            "temperature": 0,
+            "temperature": 0
         }
         try:
             response = client.chat.completions.create(**params)
-        except RateLimitError:
+        except RateLimitError as e:
             print("Rate limit hit, waiting and retrying...")
             time.sleep(2)
             response = client.chat.completions.create(**params)
@@ -297,15 +236,15 @@ class Critic:
 
 class Synthsizer:
     def __init__(self, active_model=ACTIVE_MODEL):
-        self.prompt = """
+       self.prompt = """
             You are the Synthesizer in a multi-agent stock analysis system.
 
             You will receive:
             - the user's original question
             - the orchestrator's plan
-            - a list of executed specialist results with status
+            - a list of validated specialist results
 
-            Your job is to decide whether the available specialist results are sufficient to answer the user's question.
+            Your job is to decide whether the available validated results are sufficient to answer the user's question.
 
             Important distinction:
             1. If the evidence is incomplete, identity-inconsistent, mismatched, or insufficiently grounded, then the result is not sufficient and replanning is needed.
@@ -319,8 +258,8 @@ class Synthsizer:
             - reasoning
 
             Interpret confidence as a binary sufficiency flag:
-            - confidence = 1 means the specialist results are sufficient to answer the user's question
-            - confidence = 0 means the specialist results are not sufficient and the orchestrator should refine the plan
+            - confidence = 1 means the validated results are sufficient to answer the user's question
+            - confidence = 0 means the validated results are not sufficient and the orchestrator should refine the plan
 
             Field meanings:
             - If confidence = 1, answer must be the final user-facing answer
@@ -328,13 +267,12 @@ class Synthsizer:
             - reasoning must explain why the evidence is sufficient or insufficient
 
             Decision rules:
-            - Set confidence = 1 if the specialist results are enough to answer the user's question directly and responsibly, even if the answer is that no matching fact, stock, or condition exists
+            - Set confidence = 1 if the validated results are enough to answer the user's question directly and responsibly, even if the answer is that no matching fact, stock, or condition exists
             - Set confidence = 0 only when key evidence is missing, the results are not actually responsive to the question, or identity/conflict issues prevent a reliable conclusion
             - Contradictory but still interpretable evidence does not automatically require replanning; use replanning only when the contradiction blocks a trustworthy answer
             - When results are only partially sufficient, preserve any reliable intermediate findings, distinguish reusable evidence from missing evidence, and avoid recommending repeated work that already produced valid results
-            - Use passed specialist results as evidence and treat failed specialist steps as missing or incomplete evidence
             - Do not invent facts, numbers, or claims not present in the input
-            - Use only the provided specialist results as evidence
+            - Use only the validated specialist results as evidence
             - Do not mention internal roles such as orchestrator, specialist, critic, or synthesizer in the final user-facing answer
 
             If confidence = 1:
@@ -349,20 +287,18 @@ class Synthsizer:
             - do not try to answer the user's question
             - use answer to tell the orchestrator exactly how the plan should be refined
             - be specific about what additional evidence, tool usage, or specialist routing is needed
-            - include any specialist results that are still useful and should be reused
+            - include any validated results that are still useful and should be reused
             - identify which partial findings are reliable, which are incomplete, and which should be ignored
             - when possible, suggest the next specialist call using the useful partial evidence already gathered
-        """
-        self.active_model = active_model
+       """
+       self.active_model = active_model
 
-    def run(self, question: str, plan, valid_results: list):
-        verified_results = json.dumps(
-            {
-                "question": question,
-                "orchestrator_plan": plan,
-                "valid_results": valid_results,
-            }
-        )
+    def run(self, question: str, plan, valid_results: dict):
+        verified_results = json.dumps({
+            "question": question,
+            "orchestrator_plan": plan,
+            "valid_results": valid_results,
+        })
         messages = [
             {"role": "system", "content": self.prompt},
             {"role": "user", "content": verified_results},
@@ -377,12 +313,12 @@ class Synthsizer:
                     "properties": {
                         "confidence": {"type": "number"},
                         "answer": {"type": "string"},
-                        "reasoning": {"type": "string"},
+                        "reasoning": {"type": "string"}
                     },
                     "required": ["confidence", "answer", "reasoning"],
-                    "additionalProperties": False,
-                },
-            },
+                    "additionalProperties": False
+                }
+            }
         }
 
         params = {
@@ -393,7 +329,7 @@ class Synthsizer:
         }
         try:
             response = client.chat.completions.create(**params)
-        except RateLimitError:
+        except RateLimitError as e:
             print("Rate limit hit, waiting and retrying...")
             time.sleep(2)
             response = client.chat.completions.create(**params)
@@ -406,7 +342,6 @@ class Synthsizer:
             confidence=float(results["confidence"]),
             reasoning=results["reasoning"],
         )
-
 
 SPECIALIST_PROMPTS = {
     "market_specialist": """
@@ -450,6 +385,7 @@ SPECIALIST_PROMPTS = {
         Set confidence lower when data is missing, ambiguous, incomplete, or partially conflicting.
         Do not invent facts that are not present in tool outputs.
         """,
+
     "fundamental_specialist": """
         You are fundamental_specialist in a multi-agent stock analysis system.
 
@@ -470,6 +406,7 @@ SPECIALIST_PROMPTS = {
         Use for custom filtering/counting in stocks.db. Fields include ticker, company, sector, industry, market_cap (Large/Mid/Small), exchange. Make sure to use A valid SQL SELECT statement as input.
         - get_company_overview:
         Use for company fundamentals (P/E, EPS, market cap, 52-week high/low).
+
 
         Rules:
         - Use only tool evidence, not guesses
@@ -492,6 +429,7 @@ SPECIALIST_PROMPTS = {
         Set confidence lower when data is missing, ambiguous, incomplete, or partially conflicting.
         Do not invent facts that are not present in tool outputs.
         """,
+
     "news_specialist": """
         You are news_specialist in a multi-agent stock analysis system.
 
@@ -535,221 +473,99 @@ SPECIALIST_PROMPTS = {
         """,
 }
 
-
-def _append_context(existing: str, addition: str) -> str:
-    if not addition:
-        return existing
-    if not existing:
-        return addition
-    return f"{existing}\n\n{addition}"
-
-
-def _build_step_summary(
-    step_index: int,
-    agent_name: str,
-    task: str,
-    status: str,
-    specialist_result: AgentResult,
-    critic_reasoning: str,
-    attempts: int,
-):
-    return {
-        "step_index": step_index,
-        "agent_name": agent_name,
-        "task": task,
-        "status": status,
-        "answer": specialist_result.answer,
-        "confidence": specialist_result.confidence,
-        "tools_called": specialist_result.tools_called,
-        "issues_found": specialist_result.issues_found,
-        "critic_reasoning": critic_reasoning,
-        "attempts": attempts,
-    }
-
-
-def _build_execution_record(step_summary: dict):
-    return {
-        "step_index": step_summary["step_index"],
-        "agent_name": step_summary["agent_name"],
-        "task": step_summary["task"],
-        "status": step_summary["status"],
-        "critic_reasoning": step_summary["critic_reasoning"],
-        "attempts": step_summary["attempts"],
-    }
-
-
-def run_multi_agent(question, conv_hist="", active_model=ACTIVE_MODEL):
+def run_multi_agent(question, conv_hist = "", active_model=ACTIVE_MODEL):
     t0 = time.perf_counter()
 
-    market_tools = [SCHEMA_TICKERS, SCHEMA_PRICE, SCHEMA_STATUS, SCHEMA_MOVERS]
-    fundamental_tools = [SCHEMA_OVERVIEW, SCHEMA_SQL, SCHEMA_TICKERS]
-    sentiment_tools = [SCHEMA_NEWS, SCHEMA_SQL]
+    MARKET_TOOLS      = [SCHEMA_TICKERS, SCHEMA_PRICE, SCHEMA_STATUS, SCHEMA_MOVERS]
+    FUNDAMENTAL_TOOLS = [SCHEMA_OVERVIEW, SCHEMA_SQL, SCHEMA_TICKERS]
+    SENTIMENT_TOOLS   = [SCHEMA_NEWS, SCHEMA_SQL]
 
     orchestrator = Orchestrator(active_model)
-    market_specialist = Specialist(
-        "market_specialist",
-        schema=market_tools,
-        active_model=active_model,
-    )
-    fundamental_specialist = Specialist(
-        "fundamental_specialist",
-        schema=fundamental_tools,
-        active_model=active_model,
-    )
-    news_specialist = Specialist(
-        "news_specialist",
-        schema=sentiment_tools,
-        active_model=active_model,
-    )
+    market_specialist = Specialist("market_specialist", schema=MARKET_TOOLS)
+    fundamental_specialist = Specialist("fundamental_specialist", schema=FUNDAMENTAL_TOOLS)
+    news_specialist = Specialist("news_specialist", schema=SENTIMENT_TOOLS)
     critic = Critic(active_model)
     synthesizer = Synthsizer(active_model)
 
-    specialists = {
+    SPECIALISTS = {
         "market_specialist": market_specialist,
         "fundamental_specialist": fundamental_specialist,
         "news_specialist": news_specialist,
     }
-    specialist_summaries = []
-    specialist_results = []
-    execution_history = []
+    SPECIALISTS_ANSWER = []
+    SPECIALISTS_RESULTS = []
 
-    max_replans = 5
-    max_specialist_attempts = 5
-    max_plan_steps = 5
-    orchestrator_context = conv_hist.strip()
+    reply_is_ready = False
+    max_attempts = 5
+    
+    retry = 0
+    while not reply_is_ready and retry < max_attempts:
+        orchestrator_results = orchestrator.run(question=question, conv_hist=conv_hist)
+        plan = orchestrator_results.answer
+        print(plan)
 
-    replan_round = 0
-    while replan_round < max_replans:
-        current_plan = ""
-        latest_plan = ""
-        step_counter = 0
-        orchestrator_done = False
-
-        while step_counter < max_plan_steps:
-            orchestrator_results = orchestrator.run(
-                question=question,
-                conv_hist=orchestrator_context,
-                current_plan=current_plan,
-                execution_history=execution_history,
-                specialist_results=specialist_summaries,
-            )
-            latest_plan = orchestrator_results.answer
-            current_plan = latest_plan
-            orchestration_state = orchestrator_results.raw_data
-            status = orchestration_state["status"]
-            next_step = orchestration_state["next_step"]
-
-            print(f"current plan: {current_plan}")
-
-            if status == "done":
-                orchestrator_done = True
-                break
-
-            if not next_step:
-                raise ValueError("Orchestrator returned continue without next_step")
-
-            specialist_name = next_step["agent_name"]
-            task = next_step["instruction"]
-            print(f"task:{task}")
-
-            specialists[specialist_name].prompt = SPECIALIST_PROMPTS[specialist_name]
-
+        for specialist_called  in orchestrator_results.raw_data["specialist_to_call"]:
+            sp = specialist_called["agent_name"]
+            task = specialist_called["instruction"]
+            print(task)
+            SPECIALISTS[sp].prompt = SPECIALIST_PROMPTS[sp]
             task_success = False
-            task_attempt = 0
-            feedback_context = ""
-            critic_reasoning = ""
-            sp_results = AgentResult(
-                agent_name=specialist_name,
-                answer="Specialist failed in retrieving relevant infomation.",
-                confidence=0.0,
-                issues_found=["specialist did not complete successfully"],
-            )
+            task_attempt = 1
+            cxt = ""
 
-            while not task_success and task_attempt < max_specialist_attempts:
+            while not task_success and task_attempt <= max_attempts:
                 task_attempt += 1
-                sp_results = specialists[specialist_name].run(
-                    task=task,
-                    cxt=feedback_context,
-                )
+                sp_results = SPECIALISTS[sp].run(task=task, cxt=cxt)
                 critic_results = critic.run(task=task, specalist_results=sp_results)
-                critic_reasoning = critic_results.reasoning
 
-                if critic_results.answer:
-                    task_success = True
+                if not critic_results.answer:
+                    cxt = f"\n\nYour last answer failed!\n\nlast answer:{sp_results.answer}\n\nfailure reason: {critic_results.reasoning}"
+                    task_success = False
+                    print(f"{sp} has failed critic's evaluation")
                 else:
-                    print(f"{specialist_name} has failed critic's evaluation")
-                    feedback_context = (
-                        "\n\nYour last answer failed!\n\n"
-                        f"last answer:{sp_results.answer}\n\n"
-                        f"failure reason: {critic_results.reasoning}"
-                    )
-                    print(feedback_context)
-
-            if task_success:
-                print(f"{specialist_name} has passed critic's evaluation")
-                step_status = "passed"
+                    task_success = True
+            
+            if task_attempt > max_attempts:
+                print(f"{sp} has reached it maximum attempts")
+                SPECIALISTS_ANSWER.append({
+                    "agent_name": sp,
+                    "task": task,
+                    "status": "failed",
+                    "answer": "Specialist failed in retrieving relevant infomation.",
+                })
             else:
-                print(f"{specialist_name} has reached it maximum attempts")
-                step_status = "failed"
-                if not sp_results.answer:
-                    sp_results.answer = "Specialist failed in retrieving relevant infomation."
-
-            step_index = len(execution_history) + 1
-            step_summary = _build_step_summary(
-                step_index=step_index,
-                agent_name=specialist_name,
-                task=task,
-                status=step_status,
-                specialist_result=sp_results,
-                critic_reasoning=critic_reasoning,
-                attempts=task_attempt,
-            )
-            specialist_summaries.append(step_summary)
-            execution_history.append(_build_execution_record(step_summary))
-            specialist_results.append(sp_results)
-            step_counter += 1
-
-        if not orchestrator_done:
-            orchestrator_context = _append_context(
-                orchestrator_context,
-                (
-                    "The orchestrator did not finish the plan within the allowed "
-                    f"step budget of {max_plan_steps}. Revise the plan to be more targeted."
-                ),
-            )
-            replan_round += 1
-            continue
-
-        synthesizer_results = synthesizer.run(
-            question=question,
-            plan=latest_plan,
-            valid_results=specialist_summaries,
-        )
+                print(f"{sp} has passed critic's evaluation")
+                SPECIALISTS_ANSWER.append({
+                    "agent_name": sp,
+                    "task": task,
+                    "status": "passed",
+                    "answer": sp_results.answer,
+                })
+            SPECIALISTS_RESULTS.append(sp_results)
+    
+        synthesizer_results = synthesizer.run(question=question, plan=plan, valid_results=SPECIALISTS_ANSWER)
         if synthesizer_results.confidence == 1.0:
+            reply_is_ready = True
             print("reply is ready")
-            wall_time = round(time.perf_counter() - t0, 3)
-            return {
-                "final_answer": synthesizer_results.answer,
-                "agent_results": specialist_results,
-                "elapsed_sec": wall_time,
-                "architecture": "orchestrator-critic",
-            }
-
-        print("specialist results insufficent in answering user's question, returning to orchestrator replanning")
-        orchestrator_context = _append_context(
-            orchestrator_context,
-            (
-                "Synthesizer said the executed plan is insufficient.\n\n"
-                f"Reason:\n{synthesizer_results.reasoning}\n\n"
-                f"Replanning guidance:\n{synthesizer_results.answer}"
-            ),
-        )
-        replan_round += 1
-
-    wall_time = round(time.perf_counter() - t0, 3)
-    return {
-        "final_answer": "Sorry, I am not being able to answer your question now.",
-        "agent_results": specialist_results,
-        "elapsed_sec": wall_time,
-        "architecture": "orchestrator-critic",
-    }
+        else:
+            retry += 1
+            reply_is_ready = False
+            conv_hist += f"\n\nSpecalist results insufficient in answering user's question.\n\nHere's the reason:\n\n{synthesizer_results.reasoning}\n\nand replanning suggestions:\n\n{synthesizer_results.answer}"
+            print("specialist results insufficent in answering user's question, returning to orchestrator replanning")
+    
+    if retry < max_attempts:
+        wall_time = round(time.perf_counter() - t0, 3)
+        return {
+            "final_answer": synthesizer_results.answer,
+            "agent_results": SPECIALISTS_RESULTS,
+            "elapsed_sec": wall_time,
+            "architecture": "orchestrator-critic"
+        }
+    else:
+        wall_time = round(time.perf_counter() - t0, 3)
+        return {
+            "final_answer": "Sorry, I am not being able to answer your question now.",
+            "agent_results": SPECIALISTS_RESULTS,
+            "elapsed_sec": wall_time,
+            "architecture": "orchestrator-critic"
+        }

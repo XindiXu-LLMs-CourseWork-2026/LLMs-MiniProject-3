@@ -1,4 +1,5 @@
 import sqlite3
+import warnings
 import requests
 import yfinance as yf
 import pandas as pd
@@ -11,21 +12,46 @@ def get_price_performance(tickers: list, period: str = "1y"):
     TICKER_ALIASES = {
         "FI": "FISV",
     }
+    INACTIVE_TICKERS = {
+        "JNPR": {
+            "reason": "Ticker delisted after acquisition by HPE on 2025-07-02",
+            "replacement_ticker": "HPE",
+        },
+        "ANSS": {
+            "reason": "Ticker delisted after acquisition by SNPS on 2025-07-17",
+            "replacement_ticker": "SNPS",
+        },
+        "DAY": {
+            "reason": "Ticker delisted after acquisition by Thoma Bravo on 2026-02-04",
+            "replacement_ticker": None,
+        },
+    }
+
     def normalize_ticker(ticker: str) -> str:
         return TICKER_ALIASES.get(ticker.upper(), ticker.upper())
         
     for ticker in tickers:
+        inactive_meta = INACTIVE_TICKERS.get(ticker.upper())
+        if inactive_meta:
+            results[ticker] = {
+                "error": inactive_meta["reason"],
+                "replacement_ticker": inactive_meta["replacement_ticker"],
+            }
+            continue
 
         try:
             yf_ticker = normalize_ticker(ticker)
-            data = yf.download(yf_ticker, period=period, progress=False, auto_adjust=True)
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", FutureWarning)
+                data = yf.download(yf_ticker, period=period, progress=False, auto_adjust=True)
 
             if data.empty:
                 results[ticker] = {"error": "No data"}
                 continue
 
-            start = float(data["Close"].iloc[0])
-            end = float(data["Close"].iloc[-1])
+            close_prices = data["Close"]
+            start = float(close_prices.iloc[0].item())
+            end = float(close_prices.iloc[-1].item())
 
             results[ticker] = {
                 "start_price": round(start,2),

@@ -135,7 +135,7 @@ def run_full_evaluation(output_xlsx: str = "results.xlsx", delay_sec: float = 3.
     print(f"  FULL EVALUATION  |  {total} questions × 3 architectures")
     print(f"  Model: {active_model}  |  Output: {output_xlsx}")
     print(f"{'=' * 62}\n")
-    bq = BENCHMARK_QUESTIONS[9:11] + BENCHMARK_QUESTIONS[14:]
+    bq = BENCHMARK_QUESTIONS
     for i, q in enumerate(bq, 1):
         print(f"[{i:02d}/{total}] {q['id']} ({q['complexity']:6s}) {q['question'][:52]}...")
         rec = EvalRecord(question_id=q["id"], question=q["question"],
@@ -183,9 +183,9 @@ def run_full_evaluation(output_xlsx: str = "results.xlsx", delay_sec: float = 3.
         try:
             t0 = time.time()
             ma = run_multi_agent(q["question"])
-            print(f"ma: {ma}")
+            # print(f"ma: {ma}")
             res = ma.get("agent_results", [])
-            print(f"res: {res}")
+            # print(f"res: {res}")
             all_tools = [t for r in res for t in r.tools_called]
             all_issues = [iss for r in res for iss in r.issues_found]
             avg_conf = sum(r.confidence for r in res) / len(res) if res else 0.0
