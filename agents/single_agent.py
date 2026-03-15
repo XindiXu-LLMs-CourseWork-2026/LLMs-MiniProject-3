@@ -53,16 +53,37 @@ When you are ready to give the final answer, return:
 Set confidence higher when the tool results directly support the answer.
 Set confidence lower when data is missing, ambiguous, incomplete, or partially conflicting.
 Do not invent facts that are not present in tool outputs.
-- For the final answer output, give a concise direct answer, no reasoning needed from previous steps.
+- For the final answer output, give a concise direct answer, no reasoning or plan needed from previous steps.
 - Then provide a short evidence section (tools used and key values).
 - If uncertain, explicitly state what is unknown and why.
 """
 
-def run_single_agent(question: str, verbose: bool = True, active_model=ACTIVE_MODEL) -> AgentResult:
+
+USER_QUESTION_TEMPLATE = """
+Conversation history (for context only):
+{conversation_history}
+
+Current task:
+{question}
+
+Instructions:
+- Use the conversation history only to inform your reasoning.
+- Do not invent facts; use tool outputs if available.
+- Answer concisely and clearly.
+- Follow the rules in the system prompt.
+"""
+
+
+def run_single_agent(question: str, verbose: bool = True, conv_hist="", active_model=ACTIVE_MODEL) -> AgentResult:
+    task = USER_QUESTION_TEMPLATE.format(
+        conversation_history=conv_hist,
+        question=question
+    )
+    print(f"task: {task}")
     return run_specialist_agent(
         agent_name="Single Agent",
         system_prompt=SINGLE_AGENT_PROMPT,
-        task=question,
+        task=task,
         tool_schemas=ALL_SCHEMAS,
         max_iters=10,
         verbose=verbose,

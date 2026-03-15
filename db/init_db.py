@@ -5,7 +5,7 @@ import pandas as pd
 from config import DB_PATH
 
 
-def create_local_database(csv_path="./db/sp500_companies.csv"):
+def create_local_database(csv_path="sp500_companies.csv"):
 
     if not os.path.exists(csv_path):
         raise FileNotFoundError("sp500 csv not found")

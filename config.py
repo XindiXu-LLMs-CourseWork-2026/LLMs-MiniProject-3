@@ -10,7 +10,6 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "YOUR_KEY")
 ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY", "test")
 
 # database
-DB_CREATE_PATH = "stocks.db"
 DB_PATH = "../stocks.db"
 
 # Mock ALPHAVANTAGE
@@ -21,5 +20,5 @@ AV_BASE = os.getenv("ALPHAVANTAGE_BASE_URL", "https://www.alphavantage.co")
 
 MODEL_SMALL = "gpt-4o-mini"
 MODEL_LARGE = "gpt-4o"
-ACTIVE_MODEL = MODEL_LARGE
+ACTIVE_MODEL = MODEL_SMALL
 client = OpenAI(api_key=OPENAI_API_KEY)

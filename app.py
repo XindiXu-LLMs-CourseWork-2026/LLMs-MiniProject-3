@@ -27,7 +27,10 @@ if "messages" not in st.session_state:
     # ... (initialize messages)
     st.session_state["messages"] = []
 
-agent_type = st.sidebar.selectbox("Agent selector", ("Single Agent", "Multi-Agent"), index=1)
+if st.button("Clear Conversation"):
+    st.session_state.messages = []
+
+agent_type = st.sidebar.selectbox("Agent selector", ("Single Agent", "Multi Agent"), index=1)
 model_type = st.sidebar.selectbox("Model selector", ("gpt-4o-mini", "gpt-4o"), index=1)
 
 # Display existing chat messages
@@ -49,16 +52,17 @@ if prompt := st.chat_input("What would you like to chat about?"):
     conversation_history = get_conversation()  # Get conversation history if needed
     ai_response = ""
     if agent_type == "Single Agent":
-        agent_result = run_single_agent(prompt, model_type)
+        agent_result = run_single_agent(prompt, conv_hist=conversation_history, active_model=model_type)
         ai_response = agent_result.answer
-    elif agent_type == "Multi-Agent":
+    elif agent_type == "Multi Agent":
         agent_result = run_multi_agent(prompt, conversation_history, model_type)
         ai_response = agent_result.get("final_answer", "")
 
     with st.chat_message("assistant"):
-        st.markdown(ai_response)
+        response = f"Response generated using {agent_type} and {model_type}.\n\n {ai_response}"
+        st.markdown(response)
 
     # ... (append AI response to messages)
     st.session_state.messages.append(
-        {"role": "assistant", "content": ai_response}
+        {"role": "assistant", "content": response}
     )
