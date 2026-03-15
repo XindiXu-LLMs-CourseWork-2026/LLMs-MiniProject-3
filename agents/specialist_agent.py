@@ -34,6 +34,7 @@ def run_specialist_agent(
     max_iters     : hard cap on iterations to prevent infinite loops
     verbose       : print each tool call as it happens
     """
+ 
     tools_called = []
     raw_data = {}
     messages = [
@@ -60,7 +61,7 @@ def run_specialist_agent(
 
     for i in range(max_iters):
         params = {
-            "model":ACTIVE_MODEL,
+            "model":active_model,
             "messages": messages,
             "response_format":response_schema,
             "temperature": 0,
@@ -72,7 +73,7 @@ def run_specialist_agent(
 
         try:
             response = client.chat.completions.create(**params)
-        except RateLimitError as e:
+        except RateLimitError:
             print("Rate limit hit, waiting and retrying...")
             time.sleep(2)
             response = client.chat.completions.create(**params)
@@ -105,7 +106,7 @@ def run_specialist_agent(
             if func:
                 f_output = func(**args)
             else:
-                f_output = {"Error": f"Function: {name} is not avaliable"}
+                f_output = {"Error": f"Function: {name} is not available"}
             
             tools_called.append(name)
             raw_data.setdefault(name, []).append(f_output)

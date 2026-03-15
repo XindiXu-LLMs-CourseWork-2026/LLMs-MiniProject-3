@@ -283,8 +283,8 @@ class Synthsizer:
             - do not try to answer the user's question
             - use answer to tell the orchestrator exactly how the plan should be refined
             - be specific about what additional evidence, tool usage, or specialist routing is needed
-        """
-        self.active_model = active_model
+       """
+       self.active_model = active_model
 
     def run(self, question: str, plan, valid_results: dict):
         verified_results = json.dumps({
@@ -485,7 +485,7 @@ def run_multi_agent(question, conv_hist = "", active_model=ACTIVE_MODEL):
     max_attempts = 5
     
     retry = 0
-    while not reply_is_ready and retry < 5:
+    while not reply_is_ready and retry < max_attempts:
         orchestrator_results = orchestrator.run(question=question, conv_hist=conv_hist)
         plan = orchestrator_results.answer
         print(plan)

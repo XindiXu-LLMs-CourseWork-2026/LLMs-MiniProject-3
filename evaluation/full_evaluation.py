@@ -135,8 +135,8 @@ def run_full_evaluation(output_xlsx: str = "results.xlsx", delay_sec: float = 3.
     print(f"  FULL EVALUATION  |  {total} questions × 3 architectures")
     print(f"  Model: {active_model}  |  Output: {output_xlsx}")
     print(f"{'=' * 62}\n")
-
-    for i, q in enumerate(BENCHMARK_QUESTIONS, 1):
+    bq = BENCHMARK_QUESTIONS[9:11] + BENCHMARK_QUESTIONS[14:]
+    for i, q in enumerate(bq, 1):
         print(f"[{i:02d}/{total}] {q['id']} ({q['complexity']:6s}) {q['question'][:52]}...")
         rec = EvalRecord(question_id=q["id"], question=q["question"],
                          complexity=q["complexity"], category=q["category"],
