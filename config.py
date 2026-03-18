@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -14,12 +15,17 @@ ALPHAVANTAGE_API_KEY = os.getenv("ALPHAVANTAGE_API_KEY", "test")
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = str(BASE_DIR / "stocks.db")
 
-# Mock ALPHAVANTAGE
-# os.environ["ALPHAVANTAGE_BASE_URL"] = "http://127.0.0.1:2345"
+# Alpha Vantage base URL:
+# - real API by default
+# - mock server when ALPHAVANTAGE_BASE_URL is explicitly set, e.g. http://127.0.0.1:2345
 AV_BASE = os.getenv("ALPHAVANTAGE_BASE_URL", "https://www.alphavantage.co")
 
 # OpenAI
 MODEL_SMALL = "gpt-4o-mini"
 MODEL_LARGE = "gpt-4o"
 ACTIVE_MODEL = MODEL_SMALL
-client = OpenAI(api_key=OPENAI_API_KEY)
+
+
+@lru_cache(maxsize=1)
+def get_client() -> OpenAI:
+    return OpenAI(api_key=OPENAI_API_KEY)

@@ -14,7 +14,7 @@ from agents.tool_schemas import (
     SCHEMA_STATUS,
     SCHEMA_TICKERS,
 )
-from config import ACTIVE_MODEL, client
+from config import ACTIVE_MODEL, get_client
 
 
 class Orchestrator:
@@ -166,6 +166,7 @@ class Orchestrator:
             "response_format": response_schema,
             "temperature": 0,
         }
+        client = get_client()
         try:
             response = client.chat.completions.create(**params)
         except RateLimitError:
@@ -278,6 +279,7 @@ class Critic:
             "response_format": response_schema,
             "temperature": 0,
         }
+        client = get_client()
         try:
             response = client.chat.completions.create(**params)
         except RateLimitError:
@@ -391,6 +393,7 @@ class Synthsizer:
             "response_format": response_schema,
             "temperature": 0,
         }
+        client = get_client()
         try:
             response = client.chat.completions.create(**params)
         except RateLimitError:

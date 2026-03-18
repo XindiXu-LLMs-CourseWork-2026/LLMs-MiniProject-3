@@ -3,7 +3,7 @@ import time
 from openai import RateLimitError
 from agents.models.agent_result import AgentResult
 from agents.tool_schemas import ALL_TOOL_FUNCTIONS
-from config import ACTIVE_MODEL, client
+from config import ACTIVE_MODEL, get_client
 
 
 def run_specialist_agent(
@@ -61,6 +61,7 @@ def run_specialist_agent(
 
     for i in range(max_iters):
         print(f"running iteration #{i+1}")
+        client = get_client()
         params = {
             "model":active_model,
             "messages": messages,
@@ -129,5 +130,4 @@ def run_specialist_agent(
         raw_data=raw_data,
         issues_found=["maximum iteration reached"]
     )
-
 

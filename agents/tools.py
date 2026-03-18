@@ -1,12 +1,11 @@
 import sqlite3
 import warnings
 import requests
-import yfinance as yf
-import pandas as pd
 from config import ALPHAVANTAGE_API_KEY, AV_BASE, DB_PATH
 
 
 def get_price_performance(tickers: list, period: str = "1y"):
+    import yfinance as yf
 
     results = {}
     TICKER_ALIASES = {
@@ -103,16 +102,14 @@ def get_news_sentiment(ticker: str, limit: int = 5):
 
 
 def query_local_db(sql: str):
-
-    conn = sqlite3.connect(DB_PATH)
-
-    df = pd.read_sql_query(sql, conn)
-
-    conn.close()
+    with sqlite3.connect(DB_PATH) as conn:
+        cursor = conn.execute(sql)
+        columns = [desc[0] for desc in cursor.description] if cursor.description else []
+        rows = [dict(zip(columns, row)) for row in cursor.fetchall()]
 
     return {
-        "columns": list(df.columns),
-        "rows": df.to_dict(orient="records")
+        "columns": columns,
+        "rows": rows
     }
 
 
@@ -150,12 +147,17 @@ def get_tickers_by_sector(sector: str):
                    """
     try:
         with sqlite3.connect(DB_PATH) as conn:
-            df = pd.read_sql_query(sql_sector, conn, params=[f"%{sector}%"])
-            if df.empty:
-                df = pd.read_sql_query(sql_industry, conn, params=[f"%{sector}%"])
+            cursor = conn.execute(sql_sector, [f"%{sector}%"])
+            rows = cursor.fetchall()
+            if not rows:
+                cursor = conn.execute(sql_industry, [f"%{sector}%"])
+                rows = cursor.fetchall()
         return {
-            "sector": df["sector"].iloc[0],
-            "stocks": df[["ticker", "company", "industry"]].to_dict(orient="records")
+            "sector": rows[0][2] if rows else sector,
+            "stocks": [
+                {"ticker": row[0], "company": row[1], "industry": row[3]}
+                for row in rows
+            ]
         }
     except Exception as e:
         return {"error": str(e)}
