@@ -16,9 +16,9 @@ BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = str(BASE_DIR / "stocks.db")
 
 # Alpha Vantage base URL:
-# - real API by default
-# - mock server when ALPHAVANTAGE_BASE_URL is explicitly set, e.g. http://127.0.0.1:2345
-AV_BASE = os.getenv("ALPHAVANTAGE_BASE_URL", "https://www.alphavantage.co")
+# - local mock server by default
+# - real API when ALPHAVANTAGE_BASE_URL is explicitly set to https://www.alphavantage.co
+AV_BASE = os.getenv("ALPHAVANTAGE_BASE_URL", "http://127.0.0.1:2345")
 
 # OpenAI
 MODEL_SMALL = "gpt-4o-mini"
