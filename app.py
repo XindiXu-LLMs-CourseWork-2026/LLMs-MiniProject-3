@@ -20,11 +20,13 @@ if "messages" not in st.session_state:
     # ... (initialize messages)
     st.session_state["messages"] = []
 
-if st.button("Clear Conversation"):
+def clear_conversation():
     st.session_state.messages = []
 
-agent_type = st.sidebar.selectbox("Agent selector", ("Single Agent", "Multi Agent"), index=1)
-model_type = st.sidebar.selectbox("Model selector", ("gpt-4o-mini", "gpt-4o"), index=1)
+with st.sidebar:
+    agent_type = st.selectbox("Agent selector", ("Single Agent", "Multi Agent"), index=0)
+    model_type = st.selectbox("Model selector", ("gpt-4o-mini", "gpt-4o"), index=0)
+    st.button("Clear Conversation", on_click=clear_conversation, use_container_width=True)
 
 # Display existing chat messages
 # ... (code for displaying messages)
